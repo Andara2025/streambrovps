@@ -1,0 +1,450 @@
+<% layout('layout') -%>
+<div class="space-y-4">
+  <div class="flex items-center justify-between">
+    <h2 class="text-xl font-semibold">YouTube Broadcasts</h2>
+    <div class="flex items-center gap-3">
+      <div class="hidden sm:flex items-center gap-2">
+        <label class="inline-flex items-center gap-2 text-sm text-gray-300"><input id="yt-select-all" type="checkbox"> Select all</label>
+        <button id="yt-bulk-delete" class="px-3 py-1.5 text-sm bg-red-600 hover:bg-red-500 rounded disabled:opacity-50" disabled>Delete selected</button>
+      </div>
+      <label for="yt-status" class="text-sm text-gray-400">Status</label>
+      <select id="yt-status" class="bg-dark-700 border border-gray-600 text-sm rounded px-2 py-1">
+        <option value="upcoming" selected>Upcoming</option>
+        <option value="active">Active</option>
+        <option value="completed">Completed</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="yt-broadcasts" class="space-y-3"></div>
+
+  <!-- Edit Broadcast Modal -->
+  <div id="ytEditModal" class="hidden fixed inset-0 bg-black/50 z-[70] items-center justify-center p-4">
+    <div class="bg-dark-800 rounded-xl w-full max-w-md border border-gray-700">
+      <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+        <h3 class="font-medium">Edit Broadcast</h3>
+        <button onclick="closeEditModal()" class="text-gray-400 hover:text-white"><i class="ti ti-x text-xl"></i></button>
+      </div>
+      <form id="ytEditForm" class="p-4 space-y-4">
+        <input type="hidden" id="editBroadcastId">
+        <div>
+          <label class="block text-sm text-gray-300 mb-1">Title</label>
+          <input type="text" id="editTitle" required class="w-full px-3 py-2 bg-dark-700 border border-gray-600 rounded">
+        </div>
+        <div>
+          <label class="block text-sm text-gray-300 mb-1">Description</label>
+          <textarea id="editDescription" rows="3" class="w-full px-3 py-2 bg-dark-700 border border-gray-600 rounded"></textarea>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm text-gray-300 mb-1">Scheduled Time</label>
+            <input type="datetime-local" id="editScheduledTime" class="w-full px-3 py-2 bg-dark-700 border border-gray-600 rounded">
+          </div>
+          <div>
+            <label class="block text-sm text-gray-300 mb-1">Privacy</label>
+            <select id="editPrivacy" class="w-full px-3 py-2 bg-dark-700 border border-gray-600 rounded">
+              <option value="private">Private</option>
+              <option value="unlisted">Unlisted</option>
+              <option value="public">Public</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label class="inline-flex items-center gap-2 text-sm text-gray-300"><input id="editAutoStart" type="checkbox"> Auto Start</label>
+          <label class="inline-flex items-center gap-2 text-sm text-gray-300"><input id="editAutoStop" type="checkbox"> Auto End</label>
+        </div>
+        <div class="pt-2 flex justify-end gap-2">
+          <button type="button" onclick="closeEditModal()" class="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded">Cancel</button>
+          <button type="submit" class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 rounded">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  
+</div>
+
+<!-- Duplicate Broadcast Modal -->
+<div id="ytDuplicateModal" class="hidden fixed inset-0 bg-black/50 z-[70] items-center justify-center p-4">
+  <div class="bg-dark-800 rounded-xl w-full max-w-md border border-gray-700">
+    <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+      <h3 class="font-medium">Duplicate Broadcast</h3>
+      <button onclick="closeDuplicateModal()" class="text-gray-400 hover:text-white"><i class="ti ti-x text-xl"></i></button>
+    </div>
+    <form onsubmit="submitDuplicate(event)" class="p-4 space-y-4">
+      <input type="hidden" id="dupSourceId">
+      <div>
+        <label class="block text-sm text-gray-300 mb-1">Tanggal & Waktu</label>
+        <input id="dupDateTime" type="datetime-local" required class="w-full px-3 py-2 bg-dark-700 border border-gray-600 rounded" />
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label class="inline-flex items-center gap-2 text-sm text-gray-300"><input id="dupRepeatDaily" type="checkbox"> Ulangi Harian</label>
+        <div class="flex items-center gap-2">
+          <label class="text-sm text-gray-300">Jumlah Hari</label>
+          <input id="dupDays" type="number" min="1" value="7" class="w-20 px-2 py-2 bg-dark-700 border border-gray-600 rounded" />
+        </div>
+      </div>
+      <div id="dupProgress" class="text-sm text-gray-400 hidden"></div>
+      <div class="pt-2 flex justify-end gap-2">
+        <button id="dupCancelBtn" type="button" onclick="closeDuplicateModal()" class="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 rounded">Cancel</button>
+        <button id="dupSubmitBtn" type="submit" class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-500 rounded">Duplicate</button>
+      </div>
+    </form>
+  </div>
+  </div>
+
+<script>
+  const ytThumbBust = {};
+  function withCacheBust(url, id){
+    if (!url) return url;
+    const bust = ytThumbBust[id];
+    if (!bust) return url;
+    const sep = url.includes('?') ? '&' : '?';
+    return url + sep + 'cb=' + bust;
+  }
+  async function fetchBroadcasts(){
+    const statusSel = document.getElementById('yt-status');
+    const status = statusSel ? statusSel.value : 'upcoming';
+    const res = await fetch('/youtube/api/broadcasts?status=' + encodeURIComponent(status), { cache: 'no-store' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.error || 'Failed to fetch');
+    return data.items || [];
+  }
+  function renderItem(item){
+    const el = document.createElement('div');
+    el.className = 'bg-dark-800 border border-gray-700 rounded-lg p-3 flex flex-col sm:flex-row gap-3';
+    const title = item.snippet?.title || '';
+    const privacy = item.status?.privacyStatus || 'private';
+    const rawThumb = item.snippet?.thumbnails?.medium?.url || item.snippet?.thumbnails?.default?.url || '';
+    const thumb = withCacheBust(rawThumb, item.id);
+    const when = item.snippet?.scheduledStartTime || '';
+    const life = (item.status?.lifeCycleStatus||'').toLowerCase();
+    const schedIso = item.snippet?.scheduledStartTime || '';
+    const canLive = ['created','ready','testing','teststarting','livestarting'].includes(life);
+    const canComplete = ['live','testing','livestarting','teststarting'].includes(life);
+    el.innerHTML = `
+      <div class="flex items-center gap-3 sm:gap-4 w-full">
+        <label class="self-start mt-1"><input type="checkbox" class="yt-select-item" value="${item.id}"></label>
+        ${thumb ? `<img src="${thumb}" class="w-36 h-20 object-cover rounded border border-gray-700 flex-shrink-0"/>` : ''}
+        <div class="min-w-0 flex-1">
+          <div class="font-medium truncate">${title}</div>
+          <div class="text-xs text-gray-400 mt-1 flex gap-3 flex-wrap">
+            <span title="Scheduled"><i class="ti ti-clock mr-1"></i>${when || '-'}</span>
+            <span title="Privacy"><i class="ti ti-lock mr-1"></i>${privacy}</span>
+            <span title="Lifecycle" class="px-1.5 py-0.5 rounded ${life==='live'?'bg-red-900/50 text-red-300':(life==='testing'?'bg-yellow-900/50 text-yellow-300':'bg-gray-700/50 text-gray-300')}"><i class="ti ti-activity mr-1"></i>${life || '-'}</span>
+            <span title="ID" class="truncate max-w-[12rem]"><i class="ti ti-hash mr-1"></i>${item.id}</span>
+          </div>
+          <div class="mt-1 hidden text-xs text-gray-300 gap-4 flex-wrap" id="metrics-${item.id}">
+            <span><i class="ti ti-eye mr-1"></i><span class="m-viewers">0</span> viewers</span>
+            <span><i class="ti ti-thumb-up mr-1"></i><span class="m-likes">0</span> likes</span>
+            <span><i class="ti ti-message-2 mr-1"></i><span class="m-comments">0</span> comments</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:ml-auto md:ml-8 shrink-0 w-full sm:w-auto justify-end whitespace-nowrap">
+        <button class="p-2 hover:bg-gray-700 rounded" title="Edit" 
+                onclick="openEditFromData(this)"
+                data-id="${item.id}"
+                data-title="${(item.snippet?.title||'').replace(/&/g,'&amp;').replace(/\"/g,'&quot;')}"
+                data-description="${(item.snippet?.description||'').replace(/&/g,'&amp;').replace(/\"/g,'&quot;')}"
+                data-when="${when}"
+                data-privacy="${privacy}"
+                data-autostart="${item.contentDetails?.enableAutoStart ? '1':'0'}"
+                data-autostop="${item.contentDetails?.enableAutoStop ? '1':'0'}">
+          <i class="ti ti-edit text-blue-400"></i>
+        </button>
+        <button class="p-2 hover:bg-gray-700 rounded" title="Duplicate" onclick="openDuplicateModal('${item.id}', '${schedIso}')">
+          <i class="ti ti-copy text-gray-300"></i>
+        </button>
+        <button class="p-2 hover:bg-gray-700 rounded" title="Thumbnail" onclick="uploadThumbnail('${item.id}')">
+          <i class="ti ti-photo text-purple-300"></i>
+        </button>
+        <button class="p-2 hover:bg-gray-700 rounded" title="Delete" onclick="deleteBroadcast('${item.id}')">
+          <i class="ti ti-trash text-red-300"></i>
+        </button>
+        <div class="h-5 w-px bg-gray-600 mx-1"></div>
+        <button class="h-9 px-4 text-sm font-medium rounded ${canLive ? 'bg-green-600 hover:bg-green-500' : 'bg-green-900/30 text-green-500/50 cursor-not-allowed'} min-w-[96px]" ${canLive ? '' : 'disabled'} onclick="transitionBroadcast('${item.id}','live')">Go Live</button>
+        <button class="h-8 px-3 text-xs rounded ${canComplete ? 'bg-red-600 hover:bg-red-500' : 'bg-red-900/30 text-red-500/50 cursor-not-allowed'}" ${canComplete ? '' : 'disabled'} onclick="transitionBroadcast('${item.id}','complete')">End</button>
+      </div>`;
+    return el;
+  }
+  async function loadList(){
+    const container = document.getElementById('yt-broadcasts');
+    container.innerHTML = '<div class="text-gray-400">Loading...</div>';
+    try {
+      const items = await fetchBroadcasts();
+      container.innerHTML = '';
+      if (!items.length){
+        const statusSel = document.getElementById('yt-status');
+        const status = statusSel ? statusSel.value : 'upcoming';
+        const wrap = document.createElement('div');
+        wrap.className = 'text-gray-300';
+        wrap.innerHTML = `
+          <div class="text-gray-400">No ${status} broadcasts.</div>
+          <button id="yt-show-raw" class="mt-2 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-sm">Show raw (debug)</button>
+          <div id="yt-raw" class="mt-2 text-xs text-gray-400"></div>
+        `;
+        container.appendChild(wrap);
+        const btn = document.getElementById('yt-show-raw');
+        const rawDiv = document.getElementById('yt-raw');
+        if (btn) btn.addEventListener('click', async ()=>{
+          try {
+            const res = await fetch('/youtube/api/broadcasts?status=' + encodeURIComponent(status) + '&debug=1');
+            const data = await res.json();
+            const arr = data.items || [];
+            rawDiv.innerHTML = arr.map(i => `${i.id} :: ${(i.snippet?.title)||''} :: ${(i.status?.lifeCycleStatus)||''}`).join('<br>') || '(empty)';
+          } catch { rawDiv.textContent = 'debug failed'; }
+        });
+        return;
+      }
+      items.forEach(it=>container.appendChild(renderItem(it)));
+
+      // If viewing Active, fetch metrics and populate
+      const statusSel = document.getElementById('yt-status');
+      const status = statusSel ? statusSel.value : 'upcoming';
+      if (String(status).toLowerCase() === 'active' && items.length) {
+        try {
+          const ids = items.map(i=>i.id).join(',');
+          const res = await fetch('/youtube/api/metrics?ids=' + encodeURIComponent(ids));
+          const data = await res.json();
+          const map = data.items || {};
+          items.forEach(i => {
+            const row = document.getElementById('metrics-' + i.id);
+            const m = map[i.id];
+            if (row && m) {
+              row.classList.remove('hidden');
+              const v = row.querySelector('.m-viewers');
+              const l = row.querySelector('.m-likes');
+              const c = row.querySelector('.m-comments');
+              if (v) v.textContent = m.viewers ?? 0;
+              if (l) l.textContent = m.likeCount ?? 0;
+              if (c) c.textContent = m.commentCount ?? 0;
+            }
+          });
+        } catch {}
+      }
+    } catch (e){
+      container.innerHTML = `<div class="text-red-400">Failed to load broadcasts${e?.message?': '+e.message:''}</div>`;
+    }
+  }
+  function openEditFromData(btn){
+    const id = btn?.dataset?.id || '';
+    const title = btn?.dataset?.title || '';
+    const description = btn?.dataset?.description || '';
+    const when = btn?.dataset?.when || '';
+    const privacy = btn?.dataset?.privacy || 'private';
+    const autoStart = btn?.dataset?.autostart === '1';
+    const autoStop = btn?.dataset?.autostop === '1';
+    const modal = document.getElementById('ytEditModal');
+    document.getElementById('editBroadcastId').value = id;
+    document.getElementById('editTitle').value = title;
+    document.getElementById('editDescription').value = description;
+    document.getElementById('editPrivacy').value = privacy;
+    const chkStart = document.getElementById('editAutoStart');
+    const chkStop = document.getElementById('editAutoStop');
+    if (chkStart) chkStart.checked = !!autoStart;
+    if (chkStop) chkStop.checked = !!autoStop;
+    if (when) {
+      try {
+        const d = new Date(when);
+        document.getElementById('editScheduledTime').value = new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+      } catch {}
+    } else {
+      document.getElementById('editScheduledTime').value = '';
+    }
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+  }
+  function closeEditModal(){
+    const modal = document.getElementById('ytEditModal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+  }
+  // old duplicate prompt removed; use modal instead
+  function transitionBroadcast(id, status){
+    fetch(`/youtube/broadcasts/${id}/transition`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ status })})
+      .then(r=>r.json()).then(d=>{
+        if (d.error) throw new Error(d.error);
+        toast('Transitioned to '+status, 'success');
+        loadList();
+      }).catch(e=>toast('Transition failed: '+e.message,'error'));
+  }
+  function uploadThumbnail(id){
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async () => {
+      if (!input.files || !input.files[0]) return;
+      const fd = new FormData();
+      fd.append('file', input.files[0]);
+      try {
+        const res = await fetch(`/youtube/broadcasts/${id}/thumbnail`, { method:'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Upload failed');
+        ytThumbBust[id] = Date.now();
+        toast('Thumbnail updated', 'success');
+        loadList();
+      } catch (e){
+        toast('Thumbnail failed: '+(e.message||'Error'), 'error');
+      }
+    };
+    input.click();
+  }
+  function copyText(text){
+    navigator.clipboard.writeText(text).then(()=>toast('Copied','success')).catch(()=>toast('Copy failed','error'));
+  }
+  // Duplicate Modal logic
+  function openDuplicateModal(id, iso){
+    const m = document.getElementById('ytDuplicateModal');
+    if (!m) return;
+    document.getElementById('dupSourceId').value = id;
+    const inp = document.getElementById('dupDateTime');
+    try {
+      if (iso) {
+        const dt = new Date(iso);
+        const local = new Date(dt.getTime()-dt.getTimezoneOffset()*60000).toISOString().slice(0,16);
+        inp.value = local;
+      } else {
+        const now = new Date();
+        const local = new Date(now.getTime()-now.getTimezoneOffset()*60000).toISOString().slice(0,16);
+        inp.value = local;
+      }
+    } catch {}
+    m.classList.remove('hidden');
+    m.classList.add('flex');
+  }
+  function closeDuplicateModal(){
+    const m = document.getElementById('ytDuplicateModal');
+    if (!m) return;
+    m.classList.add('hidden');
+    m.classList.remove('flex');
+  }
+  async function submitDuplicate(e){
+    e?.preventDefault();
+    const id = document.getElementById('dupSourceId').value;
+    const dtVal = document.getElementById('dupDateTime').value;
+    const repeat = document.getElementById('dupRepeatDaily').checked;
+    const days = parseInt(document.getElementById('dupDays').value || '1', 10);
+    if (!id || !dtVal) { toast('Please set date & time','error'); return; }
+    const base = new Date(dtVal);
+    const tasks = Math.max(1, repeat ? days : 1);
+    const btnSubmit = document.getElementById('dupSubmitBtn');
+    const btnCancel = document.getElementById('dupCancelBtn');
+    const prog = document.getElementById('dupProgress');
+    if (btnSubmit) btnSubmit.disabled = true;
+    if (btnCancel) btnCancel.disabled = true;
+    if (btnSubmit) btnSubmit.classList.add('opacity-60');
+    if (btnCancel) btnCancel.classList.add('opacity-60');
+    if (prog) { prog.classList.remove('hidden'); prog.textContent = `Memulai duplicate 0/${tasks}...`; }
+    try {
+      let okCount = 0, skipCount = 0, failCount = 0;
+      for (let i=0;i<tasks;i++){
+        const t = new Date(base);
+        t.setDate(base.getDate()+i);
+        const iso = t.toISOString();
+        // Skip jika waktu kurang dari now + 2 menit
+        const now = new Date();
+        if (t.getTime() < now.getTime() + 2*60*1000) { skipCount++; if (prog) prog.textContent = `Lewati ${i+1}/${tasks} (terlalu dekat/masa lalu).`; continue; }
+        const res = await fetch(`/youtube/broadcasts/${id}/duplicate`,{ method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ scheduledStartTime: iso })});
+        const data = await res.json();
+        if (!res.ok || data.error) { failCount++; if (prog) prog.textContent = `Gagal ${i+1}/${tasks}: ${data.error||'Duplicate failed'}`; continue; }
+        okCount++;
+        if (prog) prog.textContent = `Berhasil ${okCount}, Lewati ${skipCount}, Gagal ${failCount} — progress ${i+1}/${tasks}`;
+      }
+      toast(`Duplicate selesai — Berhasil ${okCount}, Lewati ${skipCount}, Gagal ${failCount}`,'success');
+      closeDuplicateModal();
+      loadList();
+    } catch(err){
+      toast('Duplicate failed: ' + (err.message||'Error'),'error');
+    }
+    finally {
+      if (btnSubmit) { btnSubmit.disabled = false; btnSubmit.classList.remove('opacity-60'); }
+      if (btnCancel) { btnCancel.disabled = false; btnCancel.classList.remove('opacity-60'); }
+    }
+  }
+  async function deleteBroadcast(id){
+    try{
+      const ok = confirm('Delete this broadcast? This cannot be undone.');
+      if (!ok) return;
+      const res = await fetch(`/youtube/broadcasts/${id}`, { method: 'DELETE' });
+      const data = await res.json().catch(()=>({}));
+      if (!res.ok || data.error) throw new Error(data.error || 'Delete failed');
+      toast('Broadcast deleted','success');
+      loadList();
+    } catch(err){
+      toast('Failed to delete: ' + (err.message || 'Error'), 'error');
+    }
+  }
+  document.addEventListener('DOMContentLoaded', ()=>{ 
+    const statusSel = document.getElementById('yt-status');
+    if (statusSel) statusSel.addEventListener('change', loadList);
+    loadList(); 
+    // Bulk selection controls
+    const selAll = document.getElementById('yt-select-all');
+    const bulkBtn = document.getElementById('yt-bulk-delete');
+    function refreshBulkState(){
+      const boxes = Array.from(document.querySelectorAll('.yt-select-item'));
+      const any = boxes.some(b=>b.checked);
+      if (bulkBtn) bulkBtn.disabled = !any;
+      if (selAll) selAll.checked = boxes.length>0 && boxes.every(b=>b.checked);
+    }
+    if (selAll) selAll.addEventListener('change', ()=>{
+      const boxes = document.querySelectorAll('.yt-select-item');
+      boxes.forEach(b=>b.checked = selAll.checked);
+      refreshBulkState();
+    });
+    document.addEventListener('change', (e)=>{
+      if (e.target && e.target.classList && e.target.classList.contains('yt-select-item')){
+        refreshBulkState();
+      }
+    });
+    if (bulkBtn) bulkBtn.addEventListener('click', async ()=>{
+      const ids = Array.from(document.querySelectorAll('.yt-select-item:checked')).map(b=>b.value);
+      if (!ids.length) return;
+      if (!confirm(`Delete ${ids.length} selected broadcasts? This cannot be undone.`)) return;
+      bulkBtn.disabled = true; if (selAll) selAll.disabled = true;
+      let ok=0, fail=0; 
+      for (let i=0;i<ids.length;i++){
+        try{
+          const res = await fetch(`/youtube/broadcasts/${ids[i]}`, { method:'DELETE' });
+          if (!res.ok) throw new Error('delete failed');
+          ok++;
+        } catch { fail++; }
+      }
+      toast(`Bulk delete done — Success ${ok}, Failed ${fail}`, fail? 'error':'success');
+      if (selAll) { selAll.disabled = false; selAll.checked = false; }
+      bulkBtn.disabled = false;
+      loadList();
+    });
+  
+    const editForm = document.getElementById('ytEditForm');
+    if (editForm) {
+      editForm.addEventListener('submit', async (e)=>{
+        e.preventDefault();
+        const id = document.getElementById('editBroadcastId').value;
+        const title = document.getElementById('editTitle').value;
+        const description = document.getElementById('editDescription').value;
+        const privacyStatus = document.getElementById('editPrivacy').value;
+        const dt = document.getElementById('editScheduledTime').value;
+        const enableAutoStart = !!document.getElementById('editAutoStart')?.checked;
+        const enableAutoStop = !!document.getElementById('editAutoStop')?.checked;
+        const body = { title, description, privacyStatus };
+        if (dt) {
+          try { body.scheduledStartTime = new Date(dt).toISOString(); } catch {}
+        }
+        body.enableAutoStart = enableAutoStart;
+        body.enableAutoStop = enableAutoStop;
+        try {
+          const res = await fetch(`/youtube/broadcasts/${id}`, { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+          const data = await res.json();
+          if (!res.ok || data.error) throw new Error(data.error || 'Update failed');
+          toast('Broadcast updated','success');
+          closeEditModal();
+          loadList();
+        } catch (err){
+          toast('Update failed: '+(err.message||'Error'),'error');
+        }
+      });
+    }
+  });
+</script>
