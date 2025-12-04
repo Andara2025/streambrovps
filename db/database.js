@@ -150,13 +150,13 @@ function createTables() {
       console.error('Error creating youtube_tokens table:', err.message);
     }
   });
-  
+
   db.run(`ALTER TABLE users ADD COLUMN user_role TEXT DEFAULT 'admin'`, (err) => {
     if (err && !err.message.includes('duplicate column name')) {
       console.error('Error adding user_role column:', err.message);
     }
   });
-  
+
   db.run(`ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active'`, (err) => {
     if (err && !err.message.includes('duplicate column name')) {
       console.error('Error adding status column:', err.message);

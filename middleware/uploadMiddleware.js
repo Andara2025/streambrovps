@@ -46,12 +46,18 @@ const imageFilter = (req, file, cb) => {
 
 const uploadVideo = multer({
   storage: videoStorage,
-  fileFilter: videoFilter
+  fileFilter: videoFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024 * 1024 // 10GB max
+  }
 });
 
 const upload = multer({
   storage: avatarStorage,
-  fileFilter: imageFilter
+  fileFilter: imageFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB max for images
+  }
 });
 
 module.exports = {

@@ -26,10 +26,17 @@ const Video = require('./models/Video');
 const Playlist = require('./models/Playlist');
 const ffmpeg = require('fluent-ffmpeg');
 const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+const ffprobeInstaller = require('@ffprobe-installer/ffprobe');
+
+// Set FFmpeg and FFprobe paths globally BEFORE loading other modules
+const ffmpegPath = ffmpegInstaller.path;
+const ffprobePath = ffprobeInstaller.path;
+ffmpeg.setFfmpegPath(ffmpegPath);
+ffmpeg.setFfprobePath(ffprobePath);
+
 const streamingService = require('./services/streamingService');
 const schedulerService = require('./services/schedulerService');
 const { getYouTubeClient } = require('./config/google');
-ffmpeg.setFfmpegPath(ffmpegInstaller.path);
 process.on('unhandledRejection', (reason, promise) => {
   console.error('-----------------------------------');
   console.error('UNHANDLED REJECTION AT:', promise);
@@ -1357,7 +1364,8 @@ app.post('/api/videos/upload', isAuthenticated, (req, res, next) => {
     const fullFilePath = path.join(__dirname, 'public', filePath);
     const fileSize = req.file.size;
     await new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(fullFilePath, (err, metadata) => {
+      const probe = ffmpeg(fullFilePath).setFfprobePath(ffprobeInstaller.path);
+      probe.ffprobe((err, metadata) => {
         if (err) {
           console.error('Error extracting metadata:', err);
           return reject(err);
