@@ -3,7 +3,6 @@ let currentOrientation = 'horizontal';
 let isDropdownOpen = false;
 const videoSelectorDropdown = document.getElementById('videoSelectorDropdown');
 let desktopVideoPlayer = null;
-let mobileVideoPlayer = null;
 let streamKeyTimeout = null;
 let isStreamKeyValid = true;
 let currentPlatform = 'Custom';
@@ -25,8 +24,10 @@ function openNewStreamModal() {
 }
 function closeNewStreamModal() {
   const modal = document.getElementById('newStreamModal');
-  document.body.style.overflow = 'auto';
   modal.classList.remove('active');
+  modal.classList.add('hidden');
+  document.body.style.overflow = 'auto';
+  
   resetModalForm();
   const advancedSettingsContent = document.getElementById('advancedSettingsContent');
   const advancedSettingsToggle = document.getElementById('advancedSettingsToggle');
@@ -35,18 +36,11 @@ function closeNewStreamModal() {
     const icon = advancedSettingsToggle.querySelector('i');
     if (icon) icon.style.transform = '';
   }
-  setTimeout(() => {
-    modal.classList.add('hidden');
-  }, 200);
+  
   if (desktopVideoPlayer) {
     desktopVideoPlayer.pause();
     desktopVideoPlayer.dispose();
     desktopVideoPlayer = null;
-  }
-  if (mobileVideoPlayer) {
-    mobileVideoPlayer.pause();
-    mobileVideoPlayer.dispose();
-    mobileVideoPlayer = null;
   }
 }
 function toggleVideoSelector() {
@@ -77,80 +71,47 @@ function selectVideo(video) {
   videoSelector.classList.remove('border-red-500');
   videoSelector.classList.add('border-gray-600');
   
-  const desktopPreview = document.getElementById('videoPreview');
-  const desktopEmptyPreview = document.getElementById('emptyPreview');
-  const mobilePreview = document.getElementById('videoPreviewMobile');
-  const mobileEmptyPreview = document.getElementById('emptyPreviewMobile');
+  const preview = document.getElementById('videoPreview');
+  const emptyPreview = document.getElementById('emptyPreview');
   
   if (desktopVideoPlayer) {
     desktopVideoPlayer.pause();
     desktopVideoPlayer.dispose();
     desktopVideoPlayer = null;
   }
-  if (mobileVideoPlayer) {
-    mobileVideoPlayer.pause();
-    mobileVideoPlayer.dispose();
-    mobileVideoPlayer = null;
-  }
   
   if (video.type === 'playlist') {
-    desktopPreview.classList.add('hidden');
-    mobilePreview.classList.add('hidden');
-    desktopEmptyPreview.classList.remove('hidden');
-    mobileEmptyPreview.classList.remove('hidden');
-    
-    const desktopEmptyContent = desktopEmptyPreview.querySelector('div');
-    const mobileEmptyContent = mobileEmptyPreview.querySelector('div');
-    
-    if (desktopEmptyContent) {
-      desktopEmptyContent.innerHTML = `
-        <i class="ti ti-playlist text-4xl text-blue-400 mb-2"></i>
-        <p class="text-sm text-gray-300 font-medium">${video.name}</p>
-        <p class="text-xs text-blue-300 mt-1">Playlist selected • ${video.duration || 'Unknown duration'}</p>
-      `;
-    }
-    
-    if (mobileEmptyContent) {
-      mobileEmptyContent.innerHTML = `
+    if (preview) preview.classList.add('hidden');
+    if (emptyPreview) {
+      emptyPreview.classList.remove('hidden');
+      emptyPreview.innerHTML = `
         <i class="ti ti-playlist text-4xl text-blue-400 mb-2"></i>
         <p class="text-sm text-gray-300 font-medium">${video.name}</p>
         <p class="text-xs text-blue-300 mt-1">Playlist selected • ${video.duration || 'Unknown duration'}</p>
       `;
     }
   } else {
-    desktopPreview.classList.remove('hidden');
-    mobilePreview.classList.remove('hidden');
-    desktopEmptyPreview.classList.add('hidden');
-    mobileEmptyPreview.classList.add('hidden');
+    if (preview) preview.classList.remove('hidden');
+    if (emptyPreview) emptyPreview.classList.add('hidden');
     
-    const desktopVideoContainer = document.getElementById('videoPreview');
-    const mobileVideoContainer = document.getElementById('videoPreviewMobile');
+    const videoContainer = document.getElementById('videoPreview');
     
-    desktopVideoContainer.innerHTML = `
-      <video id="videojs-preview-desktop" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto">
-        <source src="${video.url}" type="video/mp4">
-      </video>
-    `;
-    mobileVideoContainer.innerHTML = `
-      <video id="videojs-preview-mobile" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto">
-        <source src="${video.url}" type="video/mp4">
-      </video>
-    `;
-    
-    setTimeout(() => {
-      desktopVideoPlayer = videojs('videojs-preview-desktop', {
-        controls: true,
-        autoplay: false,
-        preload: 'auto',
-        fluid: true
-      });
-      mobileVideoPlayer = videojs('videojs-preview-mobile', {
-        controls: true,
-        autoplay: false,
-        preload: 'auto',
-        fluid: true
-      });
-    }, 10);
+    if (videoContainer) {
+      videoContainer.innerHTML = `
+        <video id="videojs-preview" class="video-js vjs-default-skin vjs-big-play-centered" controls preload="auto">
+          <source src="${video.url}" type="video/mp4">
+        </video>
+      `;
+      
+      setTimeout(() => {
+        desktopVideoPlayer = videojs('videojs-preview', {
+          controls: true,
+          autoplay: false,
+          preload: 'auto',
+          fluid: true
+        });
+      }, 10);
+    }
   }
   
   document.getElementById('videoSelectorDropdown').classList.add('hidden');
@@ -267,29 +228,16 @@ function resetModalForm() {
   form.reset();
   selectedVideoData = null;
   document.getElementById('selectedVideo').textContent = 'Choose a video...';
-  const desktopPreview = document.getElementById('videoPreview');
-  const desktopEmptyPreview = document.getElementById('emptyPreview');
-  const mobilePreview = document.getElementById('videoPreviewMobile');
-  const mobileEmptyPreview = document.getElementById('emptyPreviewMobile');
-  desktopPreview.classList.add('hidden');
-  mobilePreview.classList.add('hidden');
-  desktopEmptyPreview.classList.remove('hidden');
-  mobileEmptyPreview.classList.remove('hidden');
   
-  const desktopEmptyContent = desktopEmptyPreview.querySelector('div');
-  const mobileEmptyContent = mobileEmptyPreview.querySelector('div');
+  const preview = document.getElementById('videoPreview');
+  const emptyPreview = document.getElementById('emptyPreview');
   
-  if (desktopEmptyContent) {
-    desktopEmptyContent.innerHTML = `
-      <i class="ti ti-video text-4xl text-gray-600 mb-2"></i>
-      <p class="text-sm text-gray-500">Select a video to preview</p>
-    `;
-  }
-  
-  if (mobileEmptyContent) {
-    mobileEmptyContent.innerHTML = `
-      <i class="ti ti-video text-4xl text-gray-600 mb-2"></i>
-      <p class="text-sm text-gray-500">Select a video to preview</p>
+  if (preview) preview.classList.add('hidden');
+  if (emptyPreview) {
+    emptyPreview.classList.remove('hidden');
+    emptyPreview.innerHTML = `
+      <i class="ti ti-video text-3xl text-gray-600 mb-2"></i>
+      <p class="text-xs text-gray-500">Select a video to preview</p>
     `;
   }
   
@@ -494,3 +442,243 @@ function validateStreamKeyForPlatform(streamKey, platform) {
     });
 }
 document.addEventListener('DOMContentLoaded', initModal);
+
+// Schedule Management Functions
+function addScheduleSlot() {
+  const container = document.getElementById('scheduleSlotsContainer');
+  const newSlot = document.createElement('div');
+  newSlot.className = 'schedule-slot p-2.5 bg-dark-700/50 rounded border border-gray-600';
+  newSlot.innerHTML = `
+    <!-- Time & Duration Row -->
+    <div class="flex gap-2 items-start mb-2">
+      <!-- Start Time -->
+      <div class="flex-1">
+        <label class="text-xs text-gray-400 mb-1 block">Start</label>
+        <input type="time" class="schedule-time w-full h-[32px] px-2 bg-dark-700 border border-gray-600 rounded focus:border-primary focus:ring-1 focus:ring-primary text-xs [color-scheme:dark]" onchange="calculateDurationFromEndTime(this)">
+      </div>
+      
+      <!-- End Time -->
+      <div class="flex-1">
+        <label class="text-xs text-gray-400 mb-1 block">End</label>
+        <input type="time" class="schedule-endtime w-full h-[32px] px-2 bg-dark-700 border border-gray-600 rounded focus:border-primary focus:ring-1 focus:ring-primary text-xs [color-scheme:dark]" onchange="calculateDurationFromEndTime(this)">
+      </div>
+      
+      <!-- Duration Input (Hours & Minutes) -->
+      <div class="flex-1">
+        <label class="text-xs text-gray-400 mb-1 block">Duration</label>
+        <div class="flex gap-1">
+          <input type="number" min="0" max="23" value="1" class="duration-hours w-full h-[32px] px-2 bg-dark-700 border border-gray-600 rounded focus:border-primary focus:ring-1 focus:ring-primary text-xs text-center" placeholder="H" onchange="calculateFromDuration(this)">
+          <span class="text-xs text-gray-400 flex items-center">:</span>
+          <input type="number" min="0" max="59" value="0" class="duration-minutes w-full h-[32px] px-2 bg-dark-700 border border-gray-600 rounded focus:border-primary focus:ring-1 focus:ring-primary text-xs text-center" placeholder="M" onchange="calculateFromDuration(this)">
+        </div>
+        <input type="hidden" class="schedule-duration" value="60">
+      </div>
+      
+      <!-- Delete Button -->
+      <div class="pt-5">
+        <button type="button" onclick="removeScheduleSlot(this)" 
+          class="h-[32px] w-[32px] flex items-center justify-center bg-red-500/20 hover:bg-red-500/30 text-red-500 border border-red-500/50 rounded transition-colors">
+          <i class="ti ti-trash text-sm"></i>
+        </button>
+      </div>
+    </div>
+    
+    <!-- Recurring Toggle -->
+    <div class="flex items-center gap-2 mb-2">
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" class="schedule-recurring w-4 h-4 rounded border-gray-600 text-primary focus:ring-primary focus:ring-offset-0 bg-dark-700" onchange="toggleRecurringDays(this)">
+        <span class="text-xs text-gray-300">Recurring</span>
+      </label>
+    </div>
+    
+    <!-- Recurring Days (Hidden by default) -->
+    <div class="recurring-days-container hidden">
+      <div class="text-xs text-gray-400 mb-1.5">Repeat on:</div>
+      <div class="flex flex-wrap gap-1.5">
+        <label class="flex items-center gap-1 px-2 py-1 bg-dark-700 border border-gray-600 rounded text-xs cursor-pointer hover:border-primary transition-colors">
+          <input type="checkbox" class="recurring-day w-3 h-3 rounded border-gray-600 text-primary focus:ring-0" value="1">
+          <span>Mon</span>
+        </label>
+        <label class="flex items-center gap-1 px-2 py-1 bg-dark-700 border border-gray-600 rounded text-xs cursor-pointer hover:border-primary transition-colors">
+          <input type="checkbox" class="recurring-day w-3 h-3 rounded border-gray-600 text-primary focus:ring-0" value="2">
+          <span>Tue</span>
+        </label>
+        <label class="flex items-center gap-1 px-2 py-1 bg-dark-700 border border-gray-600 rounded text-xs cursor-pointer hover:border-primary transition-colors">
+          <input type="checkbox" class="recurring-day w-3 h-3 rounded border-gray-600 text-primary focus:ring-0" value="3">
+          <span>Wed</span>
+        </label>
+        <label class="flex items-center gap-1 px-2 py-1 bg-dark-700 border border-gray-600 rounded text-xs cursor-pointer hover:border-primary transition-colors">
+          <input type="checkbox" class="recurring-day w-3 h-3 rounded border-gray-600 text-primary focus:ring-0" value="4">
+          <span>Thu</span>
+        </label>
+        <label class="flex items-center gap-1 px-2 py-1 bg-dark-700 border border-gray-600 rounded text-xs cursor-pointer hover:border-primary transition-colors">
+          <input type="checkbox" class="recurring-day w-3 h-3 rounded border-gray-600 text-primary focus:ring-0" value="5">
+          <span>Fri</span>
+        </label>
+        <label class="flex items-center gap-1 px-2 py-1 bg-dark-700 border border-gray-600 rounded text-xs cursor-pointer hover:border-primary transition-colors">
+          <input type="checkbox" class="recurring-day w-3 h-3 rounded border-gray-600 text-primary focus:ring-0" value="6">
+          <span>Sat</span>
+        </label>
+        <label class="flex items-center gap-1 px-2 py-1 bg-dark-700 border border-gray-600 rounded text-xs cursor-pointer hover:border-primary transition-colors">
+          <input type="checkbox" class="recurring-day w-3 h-3 rounded border-gray-600 text-primary focus:ring-0" value="0">
+          <span>Sun</span>
+        </label>
+      </div>
+    </div>
+  `;
+  container.appendChild(newSlot);
+}
+
+function removeScheduleSlot(button) {
+  const slot = button.closest('.schedule-slot');
+  const container = document.getElementById('scheduleSlotsContainer');
+  
+  // Prevent removing the last schedule slot
+  if (container.querySelectorAll('.schedule-slot').length > 1) {
+    slot.remove();
+  } else {
+    showNotification('Cannot Remove', 'At least one schedule slot is required', 'warning');
+  }
+}
+
+function toggleRecurringDays(checkbox) {
+  const slot = checkbox.closest('.schedule-slot');
+  const daysContainer = slot.querySelector('.recurring-days-container');
+  
+  if (checkbox.checked) {
+    daysContainer.classList.remove('hidden');
+  } else {
+    daysContainer.classList.add('hidden');
+    // Uncheck all day checkboxes
+    const dayCheckboxes = daysContainer.querySelectorAll('.recurring-day');
+    dayCheckboxes.forEach(cb => cb.checked = false);
+  }
+}
+
+// Duration Calculation Functions
+function calculateDurationFromEndTime(input) {
+  const slot = input.closest('.schedule-slot');
+  const startInput = slot.querySelector('.schedule-time');
+  const endInput = slot.querySelector('.schedule-endtime');
+  const durationHoursInput = slot.querySelector('.duration-hours');
+  const durationMinutesInput = slot.querySelector('.duration-minutes');
+  const hiddenDurationInput = slot.querySelector('.schedule-duration');
+  
+  if (!startInput.value || !endInput.value) return;
+  
+  // Parse times
+  const [startHour, startMin] = startInput.value.split(':').map(Number);
+  const [endHour, endMin] = endInput.value.split(':').map(Number);
+  
+  // Calculate duration in minutes
+  let durationMinutes = (endHour * 60 + endMin) - (startHour * 60 + startMin);
+  
+  // Handle next day scenario
+  if (durationMinutes < 0) {
+    durationMinutes += 24 * 60;
+  }
+  
+  // Convert to hours and minutes
+  const hours = Math.floor(durationMinutes / 60);
+  const minutes = durationMinutes % 60;
+  
+  // Update duration inputs
+  durationHoursInput.value = hours;
+  durationMinutesInput.value = minutes;
+  hiddenDurationInput.value = durationMinutes;
+}
+
+function calculateFromDuration(input) {
+  const slot = input.closest('.schedule-slot');
+  const startInput = slot.querySelector('.schedule-time');
+  const endInput = slot.querySelector('.schedule-endtime');
+  const durationHoursInput = slot.querySelector('.duration-hours');
+  const durationMinutesInput = slot.querySelector('.duration-minutes');
+  const hiddenDurationInput = slot.querySelector('.schedule-duration');
+  
+  if (!startInput.value) return;
+  
+  // Get duration in hours and minutes
+  const hours = parseInt(durationHoursInput.value) || 0;
+  const minutes = parseInt(durationMinutesInput.value) || 0;
+  
+  // Calculate total duration in minutes
+  const totalMinutes = hours * 60 + minutes;
+  hiddenDurationInput.value = totalMinutes;
+  
+  // Parse start time
+  const [startHour, startMin] = startInput.value.split(':').map(Number);
+  
+  // Calculate end time
+  let endMinutes = startHour * 60 + startMin + totalMinutes;
+  
+  // Handle overflow to next day
+  if (endMinutes >= 24 * 60) {
+    endMinutes = endMinutes % (24 * 60);
+  }
+  
+  const endHour = Math.floor(endMinutes / 60);
+  const endMin = endMinutes % 60;
+  
+  // Format and set end time
+  endInput.value = `${String(endHour).padStart(2, '0')}:${String(endMin).padStart(2, '0')}`;
+}
+
+function toggleStreamMode(mode) {
+  const streamNowBtn = document.getElementById('streamNowBtn');
+  const streamScheduleBtn = document.getElementById('streamScheduleBtn');
+  const scheduleSection = document.getElementById('scheduleSettingsSection');
+  const scheduleSlotsContainer = document.getElementById('scheduleSlotsContainer');
+  const modeDescription = document.getElementById('streamModeDescription');
+  
+  if (mode === 'now') {
+    // Activate Stream Now mode
+    streamNowBtn.classList.add('bg-primary', 'text-white');
+    streamNowBtn.classList.remove('text-gray-400', 'hover:bg-dark-600');
+    streamScheduleBtn.classList.remove('bg-primary', 'text-white');
+    streamScheduleBtn.classList.add('text-gray-400', 'hover:bg-dark-600');
+    
+    // Hide schedule section
+    if (scheduleSection) scheduleSection.classList.add('hidden');
+    if (scheduleSlotsContainer) scheduleSlotsContainer.classList.add('hidden');
+    
+    // Update description
+    if (modeDescription) {
+      modeDescription.textContent = 'Stream will start immediately when you click Create Stream';
+    }
+  } else {
+    // Activate Schedule mode
+    streamScheduleBtn.classList.add('bg-primary', 'text-white');
+    streamScheduleBtn.classList.remove('text-gray-400', 'hover:bg-dark-600');
+    streamNowBtn.classList.remove('bg-primary', 'text-white');
+    streamNowBtn.classList.add('text-gray-400', 'hover:bg-dark-600');
+    
+    // Show schedule section
+    if (scheduleSection) scheduleSection.classList.remove('hidden');
+    if (scheduleSlotsContainer) scheduleSlotsContainer.classList.remove('hidden');
+    
+    // Update description
+    if (modeDescription) {
+      modeDescription.textContent = 'Schedule your stream to start automatically at specific times';
+    }
+  }
+}
+
+// Update server time display
+function updateServerTime() {
+  const serverTimeDisplay = document.getElementById('serverTimeDisplay');
+  if (serverTimeDisplay) {
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('en-US', { 
+      hour12: false, 
+      hour: '2-digit', 
+      minute: '2-digit',
+      second: '2-digit'
+    });
+    serverTimeDisplay.textContent = `Server time: ${timeString}`;
+  }
+}
+
+// Update server time every second
+setInterval(updateServerTime, 1000);
+updateServerTime();

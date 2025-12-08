@@ -9,9 +9,18 @@ class StreamSchedule {
       
       db.run(
         `INSERT INTO stream_schedules (
-          id, stream_id, schedule_time, duration, status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?)`,
-        [id, data.stream_id, data.schedule_time, data.duration, 'pending', now],
+          id, stream_id, schedule_time, duration, status, is_recurring, recurring_days, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id, 
+          data.stream_id, 
+          data.schedule_time, 
+          data.duration, 
+          'pending',
+          data.is_recurring ? 1 : 0,
+          data.recurring_days || null,
+          now
+        ],
         function (err) {
           if (err) {
             console.error('Error creating stream schedule:', err.message);

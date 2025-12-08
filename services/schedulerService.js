@@ -24,24 +24,92 @@ async function checkScheduledStreams() {
       console.error('StreamingService not initialized in scheduler');
       return;
     }
+    
     const now = new Date();
-    const lookAheadTime = new Date(now.getTime() + SCHEDULE_LOOKAHEAD_SECONDS * 1000);
-    const streams = await Stream.findScheduledInRange(now, lookAheadTime);
-    if (streams.length > 0) {
-      console.log(`Found ${streams.length} streams to schedule start`);
-      for (const stream of streams) {
-        console.log(`Starting scheduled stream: ${stream.id} - ${stream.title}`);
+    const currentDay = now.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+    // Check stream_schedules table for schedules to start
+    const StreamSchedule = require('../models/StreamSchedule');
+    const allSchedules = await StreamSchedule.findPending();
+    
+    const schedulesToStart = [];
+    
+    for (const schedule of allSchedules) {
+      const scheduleTime = new Date(schedule.schedule_time);
+      
+      if (schedule.is_recurring) {
+        // Recurring schedule - check if today is allowed day
+        if (schedule.recurring_days) {
+          const allowedDays = schedule.recurring_days.split(',').map(d => parseInt(d));
+          
+          if (allowedDays.includes(currentDay)) {
+            // Check if time matches (within 1 minute window)
+            const scheduleHour = scheduleTime.getHours();
+            const scheduleMinute = scheduleTime.getMinutes();
+            const nowHour = now.getHours();
+            const nowMinute = now.getMinutes();
+            
+            if (scheduleHour === nowHour && Math.abs(scheduleMinute - nowMinute) <= 1) {
+              // Check if stream is not already live
+              const stream = await Stream.findById(schedule.stream_id);
+              if (stream && stream.status !== 'live') {
+                schedulesToStart.push(schedule);
+                console.log(`[Scheduler] Recurring schedule matched: ${schedule.stream_id} on ${getDayName(currentDay)} at ${currentTime}`);
+              }
+            }
+          }
+        }
+      } else {
+        // One-time schedule - check exact date & time
+        const lookAheadTime = new Date(now.getTime() + SCHEDULE_LOOKAHEAD_SECONDS * 1000);
+        
+        if (scheduleTime >= now && scheduleTime <= lookAheadTime) {
+          const stream = await Stream.findById(schedule.stream_id);
+          if (stream && stream.status !== 'live') {
+            schedulesToStart.push(schedule);
+            console.log(`[Scheduler] One-time schedule matched: ${schedule.stream_id} at ${scheduleTime.toISOString()}`);
+          }
+        }
+      }
+    }
+    
+    // Start matched schedules
+    if (schedulesToStart.length > 0) {
+      console.log(`[Scheduler] Starting ${schedulesToStart.length} scheduled stream(s)`);
+      
+      for (const schedule of schedulesToStart) {
+        const stream = await Stream.findById(schedule.stream_id);
+        if (!stream) continue;
+        
+        console.log(`[Scheduler] Starting stream: ${stream.id} - ${stream.title}`);
         const result = await streamingService.startStream(stream.id);
+        
         if (result.success) {
-          console.log(`Successfully started scheduled stream: ${stream.id}`);
+          console.log(`[Scheduler] Successfully started: ${stream.id}`);
+          
+          // Update schedule status (only for one-time schedules)
+          if (!schedule.is_recurring) {
+            await StreamSchedule.updateStatus(schedule.id, 'running', new Date().toISOString());
+          }
         } else {
-          console.error(`Failed to start scheduled stream ${stream.id}: ${result.error}`);
+          console.error(`[Scheduler] Failed to start ${stream.id}: ${result.error}`);
+          
+          // Mark as failed (only for one-time schedules)
+          if (!schedule.is_recurring) {
+            await StreamSchedule.updateStatus(schedule.id, 'failed');
+          }
         }
       }
     }
   } catch (error) {
-    console.error('Error checking scheduled streams:', error);
+    console.error('[Scheduler] Error checking scheduled streams:', error);
   }
+}
+
+function getDayName(day) {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  return days[day];
 }
 async function checkStreamDurations() {
   try {

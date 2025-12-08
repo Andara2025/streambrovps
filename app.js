@@ -276,6 +276,10 @@ app.use('/oauth2', oauthRoutes);
 const youtubeRoutes = require('./routes/youtube');
 app.use('/youtube', youtubeRoutes);
 
+// Stream Templates routes
+const templatesRoutes = require('./routes/templates');
+app.use('/api/templates', templatesRoutes);
+
 // Expose session-based flags to views (after session is set up and body parsers)
 // Ensure youtubeChannel is populated if tokens exist
 app.use(async (req, res, next) => {
@@ -1853,15 +1857,22 @@ app.post('/api/streams', isAuthenticated, [
       use_advanced_settings: req.body.useAdvancedSettings === 'true' || req.body.useAdvancedSettings === true,
       user_id: req.session.userId
     };
-    // Handle multiple schedules
+    // Handle Stream Now vs Schedule mode
+    const streamNow = req.body.streamNow === true;
     const schedules = req.body.schedules;
     const hasSchedules = schedules && Array.isArray(schedules) && schedules.length > 0;
     
-    if (hasSchedules) {
-      // Set first schedule as main schedule for backward compatibility
+    if (streamNow) {
+      // Stream Now mode - start immediately
+      streamData.status = 'offline'; // Will be started by user clicking "Start"
+      streamData.duration = 0; // No duration limit for manual stream
+      console.log(`[CREATE STREAM] Stream Now mode - will start manually`);
+    } else if (hasSchedules) {
+      // Schedule mode
       const firstSchedule = schedules[0];
       streamData.schedule_time = new Date(firstSchedule.schedule_time).toISOString();
-      streamData.duration = parseInt(firstSchedule.duration);
+      // Calculate total duration from all schedules
+      streamData.duration = schedules.reduce((total, sch) => total + parseInt(sch.duration), 0);
       streamData.status = 'scheduled';
     } else {
       streamData.status = 'offline';
@@ -1869,20 +1880,28 @@ app.post('/api/streams', isAuthenticated, [
     
     const stream = await Stream.create(streamData);
     
-    // Create schedule records for each schedule
-    if (hasSchedules) {
+    // Create schedule records for scheduled streams
+    if (hasSchedules && !streamNow) {
       const StreamSchedule = require('./models/StreamSchedule');
       for (const schedule of schedules) {
-        await StreamSchedule.create({
+        const scheduleData = {
           stream_id: stream.id,
           schedule_time: new Date(schedule.schedule_time).toISOString(),
-          duration: parseInt(schedule.duration)
-        });
+          duration: parseInt(schedule.duration),
+          is_recurring: schedule.is_recurring || false,
+          recurring_days: schedule.recurring_days || null
+        };
+        
+        await StreamSchedule.create(scheduleData);
+        
+        if (schedule.is_recurring) {
+          console.log(`[CREATE STREAM] Created recurring schedule for stream ${stream.id}: ${schedule.recurring_days}`);
+        }
       }
       console.log(`[CREATE STREAM] Created ${schedules.length} schedule(s) for stream ${stream.id}`);
     }
     
-    res.json({ success: true, stream });
+    res.json({ success: true, stream, streamNow });
   } catch (error) {
     console.error('Error creating stream:', error);
     res.status(500).json({ success: false, error: 'Failed to create stream' });
@@ -1897,10 +1916,16 @@ app.get('/api/streams/:id', isAuthenticated, async (req, res) => {
     if (stream.user_id !== req.session.userId) {
       return res.status(403).json({ success: false, error: 'Not authorized to access this stream' });
     }
+    
+    // Include schedules
+    const StreamSchedule = require('./models/StreamSchedule');
+    stream.schedules = await StreamSchedule.findByStreamId(stream.id);
+    
     res.json({ success: true, stream });
   } catch (error) {
     console.error('Error fetching stream:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch stream' });
+    console.error('Error details:', error.message, error.stack);
+    res.status(500).json({ success: false, error: 'Failed to fetch stream: ' + error.message });
   }
 });
 
@@ -1940,18 +1965,38 @@ app.put('/api/streams/:id', isAuthenticated, async (req, res) => {
     if (req.body.useAdvancedSettings !== undefined) {
       updateData.use_advanced_settings = req.body.useAdvancedSettings === 'true' || req.body.useAdvancedSettings === true;
     }
-    if (req.body.scheduleTime) {
-      const scheduleDate = new Date(req.body.scheduleTime);
-
-      const serverTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-      console.log(`[UPDATE STREAM] Server timezone: ${serverTimezone}`);
-      console.log(`[UPDATE STREAM] Input time: ${req.body.scheduleTime}`);
-      console.log(`[UPDATE STREAM] Parsed time: ${scheduleDate.toISOString()}`);
-      console.log(`[UPDATE STREAM] Local display: ${scheduleDate.toLocaleString('en-US', { timeZone: serverTimezone })}`);
-
-      updateData.schedule_time = scheduleDate.toISOString();
+    // Handle multiple schedules
+    const schedules = req.body.schedules;
+    const hasSchedules = schedules && Array.isArray(schedules) && schedules.length > 0;
+    
+    if (hasSchedules) {
+      // Set first schedule as main schedule for backward compatibility
+      const firstSchedule = schedules[0];
+      updateData.schedule_time = new Date(firstSchedule.schedule_time).toISOString();
+      // Calculate total duration from all schedules
+      updateData.duration = schedules.reduce((total, sch) => total + parseInt(sch.duration), 0);
       updateData.status = 'scheduled';
-    } else if ('scheduleTime' in req.body && !req.body.scheduleTime) {
+      
+      // Delete old schedules and create new ones
+      const StreamSchedule = require('./models/StreamSchedule');
+      await StreamSchedule.deleteByStreamId(req.params.id);
+      
+      for (const schedule of schedules) {
+        const scheduleData = {
+          stream_id: req.params.id,
+          schedule_time: new Date(schedule.schedule_time).toISOString(),
+          duration: parseInt(schedule.duration),
+          is_recurring: schedule.is_recurring || false,
+          recurring_days: schedule.recurring_days || null
+        };
+        
+        await StreamSchedule.create(scheduleData);
+      }
+      console.log(`[UPDATE STREAM] Updated ${schedules.length} schedule(s) for stream ${req.params.id}`);
+    } else if ('schedules' in req.body && (!schedules || schedules.length === 0)) {
+      // Clear schedules
+      const StreamSchedule = require('./models/StreamSchedule');
+      await StreamSchedule.deleteByStreamId(req.params.id);
       updateData.schedule_time = null;
       updateData.status = 'offline';
     }

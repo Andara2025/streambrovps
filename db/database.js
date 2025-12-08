@@ -178,6 +178,44 @@ function createTables() {
       console.error('Error adding status column:', err.message);
     }
   });
+
+  // Add recurring columns to stream_schedules
+  db.run(`ALTER TABLE stream_schedules ADD COLUMN is_recurring BOOLEAN DEFAULT 0`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('Error adding is_recurring column:', err.message);
+    }
+  });
+
+  db.run(`ALTER TABLE stream_schedules ADD COLUMN recurring_days TEXT`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('Error adding recurring_days column:', err.message);
+    }
+  });
+
+  // Stream Templates table for saving/loading configurations
+  db.run(`CREATE TABLE IF NOT EXISTS stream_templates (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    video_id TEXT,
+    video_name TEXT,
+    stream_title TEXT,
+    rtmp_url TEXT,
+    stream_key TEXT,
+    platform TEXT,
+    loop_video BOOLEAN DEFAULT 1,
+    schedules TEXT,
+    use_advanced_settings BOOLEAN DEFAULT 0,
+    advanced_settings TEXT,
+    user_id TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )`, (err) => {
+    if (err) {
+      console.error('Error creating stream_templates table:', err.message);
+    }
+  });
 }
 function checkIfUsersExist() {
   return new Promise((resolve, reject) => {
