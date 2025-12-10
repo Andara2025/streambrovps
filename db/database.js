@@ -158,12 +158,28 @@ function createTables() {
     schedule_time TIMESTAMP NOT NULL,
     duration INTEGER NOT NULL,
     status TEXT DEFAULT 'pending',
+    is_recurring BOOLEAN DEFAULT 0,
+    recurring_days TEXT,
     executed_at TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (stream_id) REFERENCES streams(id) ON DELETE CASCADE
   )`, (err) => {
     if (err) {
       console.error('Error creating stream_schedules table:', err.message);
+    }
+  });
+
+  // Add is_recurring column if not exists
+  db.run(`ALTER TABLE stream_schedules ADD COLUMN is_recurring BOOLEAN DEFAULT 0`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('Error adding is_recurring column:', err.message);
+    }
+  });
+
+  // Add recurring_days column if not exists
+  db.run(`ALTER TABLE stream_schedules ADD COLUMN recurring_days TEXT`, (err) => {
+    if (err && !err.message.includes('duplicate column name')) {
+      console.error('Error adding recurring_days column:', err.message);
     }
   });
 

@@ -2572,12 +2572,25 @@ const server = app.listen(port, '0.0.0.0', async () => {
   } catch (error) {
     console.error('Error resetting stream statuses:', error);
   }
+  
+  // Initialize scheduler
   schedulerService.init(streamingService);
+  
+  // Sync stream statuses
   try {
     await streamingService.syncStreamStatuses();
   } catch (error) {
     console.error('Failed to sync stream statuses:', error);
   }
+  
+  // Auto-recovery: Restart streams that should still be active
+  setTimeout(async () => {
+    try {
+      await streamingService.recoverActiveStreams();
+    } catch (error) {
+      console.error('Failed to recover active streams:', error);
+    }
+  }, 3000); // Wait 3 seconds after server start to allow everything to initialize
 });
 
 server.timeout = 30 * 60 * 1000;

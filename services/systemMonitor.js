@@ -34,6 +34,9 @@ async function getSystemStats() {
       }
     };
     
+    // Get storage breakdown
+    const storageData = await getStorageBreakdown();
+    
     return {
       cpu: {
         usage: Math.round(cpuUsage),
@@ -47,6 +50,7 @@ async function getSystemStats() {
       },
       network: networkSpeed,
       disk: diskData,
+      storage: storageData,
       platform: process.platform,
       timestamp: Date.now()
     };
@@ -182,6 +186,96 @@ async function getDiskUsage() {
       free: "0 GB", 
       usagePercent: 0,
       drive: "N/A"
+    };
+  }
+}
+
+async function getStorageBreakdown() {
+  const fs = require('fs');
+  const path = require('path');
+  
+  try {
+    // Get disk info first
+    const fsSize = await si.fsSize();
+    const platform = process.platform;
+    
+    let targetDisk;
+    if (platform === 'win32') {
+      const currentDrive = process.cwd().charAt(0).toUpperCase();
+      targetDisk = fsSize.find(disk => disk.mount.charAt(0).toUpperCase() === currentDrive);
+      if (!targetDisk) {
+        targetDisk = fsSize.find(disk => disk.mount.charAt(0).toUpperCase() === 'C');
+      }
+    } else {
+      targetDisk = fsSize.find(disk => disk.mount === '/');
+    }
+    
+    if (!targetDisk) {
+      targetDisk = fsSize[0];
+    }
+    
+    // Calculate videos folder size
+    const videosPath = path.join(process.cwd(), 'public', 'uploads', 'videos');
+    let videosSize = 0;
+    let videosCount = 0;
+    
+    if (fs.existsSync(videosPath)) {
+      const files = fs.readdirSync(videosPath);
+      for (const file of files) {
+        try {
+          const filePath = path.join(videosPath, file);
+          const stats = fs.statSync(filePath);
+          if (stats.isFile()) {
+            videosSize += stats.size;
+            videosCount++;
+          }
+        } catch (err) {
+          // Skip files that can't be accessed
+          console.warn(`Could not stat file ${file}:`, err.message);
+        }
+      }
+    }
+    
+    // Format size helper
+    const formatSize = (bytes) => {
+      if (bytes >= 1099511627776) {
+        return (bytes / 1099511627776).toFixed(2) + " TB";
+      } else if (bytes >= 1073741824) {
+        return (bytes / 1073741824).toFixed(2) + " GB";
+      } else if (bytes >= 1048576) {
+        return (bytes / 1048576).toFixed(2) + " MB";
+      } else {
+        return (bytes / 1024).toFixed(2) + " KB";
+      }
+    };
+    
+    // Calculate percentages
+    const totalBytes = targetDisk ? targetDisk.size : 0;
+    const usedBytes = targetDisk ? (targetDisk.size - targetDisk.available) : 0;
+    const freeBytes = targetDisk ? targetDisk.available : 0;
+    
+    const usagePercent = totalBytes > 0 ? Math.round((usedBytes / totalBytes) * 100) : 0;
+    const freePercent = totalBytes > 0 ? Math.round((freeBytes / totalBytes) * 100) : 0;
+    
+    return {
+      total: formatSize(totalBytes),
+      used: formatSize(usedBytes),
+      free: formatSize(freeBytes),
+      usagePercent: usagePercent,
+      freePercent: freePercent,
+      videosSize: formatSize(videosSize),
+      videosCount: videosCount
+    };
+  } catch (error) {
+    console.error('Error getting storage breakdown:', error);
+    return {
+      total: "0 GB",
+      used: "0 GB",
+      free: "0 GB",
+      usagePercent: 0,
+      freePercent: 0,
+      videosSize: "0 GB",
+      videosCount: 0
     };
   }
 }

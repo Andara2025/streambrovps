@@ -50,19 +50,24 @@ class StreamSchedule {
 
   static async findPending() {
     return new Promise((resolve, reject) => {
-      db.all(
-        `SELECT ss.*, s.title, s.video_id, s.rtmp_url, s.stream_key, s.platform, 
+      const query = `SELECT ss.*, s.title, s.video_id, s.rtmp_url, s.stream_key, s.platform, 
                 s.bitrate, s.resolution, s.fps, s.orientation, s.loop_video, 
                 s.use_advanced_settings, s.user_id
          FROM stream_schedules ss
          JOIN streams s ON ss.stream_id = s.id
-         WHERE ss.status = 'pending' AND ss.schedule_time <= datetime('now')
-         ORDER BY ss.schedule_time ASC`,
-        [],
-        (err, rows) => {
+         WHERE ss.status = 'pending'
+         ORDER BY ss.schedule_time ASC`;
+      
+      console.log('[StreamSchedule] Executing findPending query...');
+      
+      db.all(query, [], (err, rows) => {
           if (err) {
-            console.error('Error finding pending schedules:', err.message);
+            console.error('[StreamSchedule] Error finding pending schedules:', err.message);
             return reject(err);
+          }
+          console.log(`[StreamSchedule] findPending returned ${rows ? rows.length : 0} row(s)`);
+          if (rows && rows.length > 0) {
+            console.log('[StreamSchedule] First schedule:', JSON.stringify(rows[0], null, 2));
           }
           resolve(rows || []);
         }

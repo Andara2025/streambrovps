@@ -589,6 +589,126 @@ async function getAllActiveStreams() {
   }
 }
 
+async function recoverActiveStreams() {
+  console.log('[Recovery] Starting auto-recovery for active streams...');
+  
+  try {
+    const StreamSchedule = require('../models/StreamSchedule');
+    
+    // Find all schedules that should be active right now
+    const now = new Date();
+    const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    const currentDay = now.getDay();
+    
+    // Get all pending or active schedules
+    const schedules = await new Promise((resolve, reject) => {
+      db.all(
+        `SELECT ss.*, s.* 
+         FROM stream_schedules ss
+         JOIN streams s ON ss.stream_id = s.id
+         WHERE ss.status IN ('pending', 'active')
+         ORDER BY ss.schedule_time ASC`,
+        [],
+        (err, rows) => {
+          if (err) reject(err);
+          else resolve(rows || []);
+        }
+      );
+    });
+    
+    if (!schedules || schedules.length === 0) {
+      console.log('[Recovery] No active schedules found to recover');
+      return;
+    }
+    
+    console.log(`[Recovery] Found ${schedules.length} schedule(s) to check`);
+    
+    let recoveredCount = 0;
+    
+    for (const schedule of schedules) {
+      try {
+        const scheduleTime = new Date(schedule.schedule_time);
+        const scheduleHours = scheduleTime.getUTCHours();
+        const scheduleMinutes = scheduleTime.getUTCMinutes();
+        const scheduleTimeStr = `${scheduleHours.toString().padStart(2, '0')}:${scheduleMinutes.toString().padStart(2, '0')}`;
+        
+        let shouldRecover = false;
+        
+        if (schedule.is_recurring) {
+          // For recurring schedules, check if current time is within schedule window
+          const allowedDays = schedule.recurring_days ? schedule.recurring_days.split(',').map(d => parseInt(d)) : [];
+          
+          if (allowedDays.includes(currentDay)) {
+            // Check if we're within the schedule time window
+            const endTime = new Date(scheduleTime.getTime() + (schedule.duration * 60 * 1000));
+            const endHours = endTime.getUTCHours();
+            const endMinutes = endTime.getUTCMinutes();
+            
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+            const scheduleStartMinutes = scheduleHours * 60 + scheduleMinutes;
+            const scheduleEndMinutes = endHours * 60 + endMinutes;
+            
+            if (currentMinutes >= scheduleStartMinutes && currentMinutes < scheduleEndMinutes) {
+              shouldRecover = true;
+              console.log(`[Recovery] Recurring schedule ${schedule.id} should be active now (${scheduleTimeStr} - ${endHours}:${endMinutes})`);
+            }
+          }
+        } else {
+          // For one-time schedules, check if we're within the schedule window
+          const endTime = new Date(scheduleTime.getTime() + (schedule.duration * 60 * 1000));
+          
+          if (now >= scheduleTime && now < endTime) {
+            shouldRecover = true;
+            console.log(`[Recovery] One-time schedule ${schedule.id} should be active now`);
+          }
+        }
+        
+        if (shouldRecover) {
+          console.log(`[Recovery] Recovering stream ${schedule.stream_id} (${schedule.title})`);
+          
+          // Calculate remaining duration
+          const scheduleTime = new Date(schedule.schedule_time);
+          const endTime = new Date(scheduleTime.getTime() + (schedule.duration * 60 * 1000));
+          const remainingMs = endTime - now;
+          const remainingMinutes = Math.max(1, Math.floor(remainingMs / 60000));
+          
+          // Start the stream
+          await startStream(schedule.stream_id, {
+            duration: remainingMinutes,
+            isRecovery: true
+          });
+          
+          // Update schedule status
+          await new Promise((resolve, reject) => {
+            db.run(
+              'UPDATE stream_schedules SET status = ?, executed_at = ? WHERE id = ?',
+              ['active', new Date().toISOString(), schedule.id],
+              (err) => {
+                if (err) reject(err);
+                else resolve();
+              }
+            );
+          });
+          
+          recoveredCount++;
+          console.log(`[Recovery] ✓ Successfully recovered stream ${schedule.stream_id}, remaining: ${remainingMinutes} minutes`);
+        }
+      } catch (err) {
+        console.error(`[Recovery] Failed to recover schedule ${schedule.id}:`, err.message);
+      }
+    }
+    
+    if (recoveredCount > 0) {
+      console.log(`[Recovery] ✓ Successfully recovered ${recoveredCount} stream(s)`);
+    } else {
+      console.log('[Recovery] No streams needed recovery');
+    }
+    
+  } catch (error) {
+    console.error('[Recovery] Error during auto-recovery:', error);
+  }
+}
+
 module.exports = {
   startStream,
   stopStream,
@@ -597,5 +717,6 @@ module.exports = {
   getAllActiveStreams,
   getStreamLogs,
   syncStreamStatuses,
-  saveStreamHistory
+  saveStreamHistory,
+  recoverActiveStreams
 };
