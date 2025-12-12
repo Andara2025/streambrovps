@@ -107,6 +107,7 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
   fs.writeFileSync(concatFile, concatContent);
   
   if (!stream.use_advanced_settings) {
+    // Stream copy mode for playlist
     return [
       '-hwaccel', 'auto',
       '-loglevel', 'error',
@@ -119,8 +120,9 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
       '-c:v', 'copy',
       '-c:a', 'copy',
       '-flags', '+global_header',
-      '-bufsize', '4M',
-      '-max_muxing_queue_size', '7000',
+      '-bsf:v', 'h264_mp4toannexb',
+      '-bufsize', '6M',
+      '-max_muxing_queue_size', '9999',
       '-f', 'flv',
       rtmpUrl
     ];
@@ -143,15 +145,20 @@ async function buildFFmpegArgsForPlaylist(stream, playlist) {
     '-preset', 'veryfast',
     '-tune', 'zerolatency',
     '-b:v', `${bitrate}k`,
-    '-maxrate', `${bitrate * 1.5}k`,
+    '-maxrate', `${bitrate}k`,
     '-bufsize', `${bitrate * 2}k`,
     '-pix_fmt', 'yuv420p',
     '-g', `${fps * 2}`,
+    '-keyint_min', fps.toString(),
+    '-sc_threshold', '0',
     '-s', resolution,
     '-r', fps.toString(),
     '-c:a', 'aac',
     '-b:a', '128k',
     '-ar', '44100',
+    '-max_muxing_queue_size', '9999',
+    '-muxdelay', '0',
+    '-muxpreload', '0',
     '-f', 'flv',
     rtmpUrl
   ];
@@ -194,19 +201,22 @@ async function buildFFmpegArgs(stream) {
   const loopOption = stream.loop_video ? '-stream_loop' : '-stream_loop 0';
   const loopValue = stream.loop_video ? '-1' : '0';
   if (!stream.use_advanced_settings) {
+    // Stream copy mode - video must be pre-encoded with proper bitrate
+    // Recommended: 2500-4000 kbps for 720p, 4000-6000 kbps for 1080p
     return [
       '-hwaccel', 'auto',
       '-loglevel', 'error',
       '-re',
+      '-stream_loop', loopValue,
       '-fflags', '+genpts+igndts',
       '-avoid_negative_ts', 'make_zero',
-      loopOption, loopValue,
       '-i', videoPath,
       '-c:v', 'copy',
       '-c:a', 'copy',
       '-flags', '+global_header',
-      '-bufsize', '4M',
-      '-max_muxing_queue_size', '7000',
+      '-bsf:v', 'h264_mp4toannexb',
+      '-bufsize', '6M',
+      '-max_muxing_queue_size', '9999',
       '-f', 'flv',
       rtmpUrl
     ];
@@ -217,24 +227,29 @@ async function buildFFmpegArgs(stream) {
   return [
     '-hwaccel', 'auto',
     '-loglevel', 'error',
-    '-re',
+    '-re',  // Read input at native frame rate
+    '-stream_loop', loopValue,
     '-fflags', '+genpts',
     '-avoid_negative_ts', 'make_zero',
-    loopOption, loopValue,
     '-i', videoPath,
     '-c:v', 'libx264',
     '-preset', 'veryfast',
     '-tune', 'zerolatency',
     '-b:v', `${bitrate}k`,
-    '-maxrate', `${bitrate * 1.5}k`,
+    '-maxrate', `${bitrate}k`,  // Match bitrate to prevent bursts
     '-bufsize', `${bitrate * 2}k`,
     '-pix_fmt', 'yuv420p',
     '-g', `${fps * 2}`,
+    '-keyint_min', fps.toString(),  // Minimum keyframe interval
+    '-sc_threshold', '0',  // Disable scene change detection
     '-s', resolution,
     '-r', fps.toString(),
     '-c:a', 'aac',
     '-b:a', '128k',
     '-ar', '44100',
+    '-max_muxing_queue_size', '9999',
+    '-muxdelay', '0',
+    '-muxpreload', '0',
     '-f', 'flv',
     rtmpUrl
   ];
